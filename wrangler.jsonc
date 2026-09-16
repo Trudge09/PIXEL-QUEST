@@ -2,11 +2,14 @@
 {
   "name": "pixel-quest",
   "compatibility_date": "2026-09-17",
+  "assets": {
+    "directory": "./"
+  },
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "pixel-quest-db",
-      "database_id": "b9daa27c-0cd1-45b3-bcbb-4c7b8e6d781c"
+      "database_id": "여기에_실제_UUID_입력"
     }
   ]
 }
