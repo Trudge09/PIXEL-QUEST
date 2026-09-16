@@ -1,16 +1,9 @@
-
 {
   "name": "pixel-quest",
-  "compatibility_date": "2026-09-17",
-  "assets": {
-    "directory": "./"
-  },
+  "main": "worker.js",
+  "compatibility_date": "2026-09-16",
+  "assets": { "directory": "./public", "binding": "ASSETS" },
   "d1_databases": [
-    {
-      "binding": "DB",
-      "database_name": "pixel-quest-db",
-      "database_id": "b9daa27c-0cd1-45b3-bcbb-4c7b8e6d781c"
-    }
+    { "binding": "DB", "database_name": "pixel-quest-db", "database_id": "b9daa27c-0cd1-45b3-bcbb-4c7b8e6d781c" }
   ]
 }
-  
