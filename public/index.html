@@ -170,6 +170,9 @@ body[data-theme="white"] .deleteOverlay{background:#1d243999}body[data-theme="wh
 body[data-theme="dark"] .deleteDialog{background:#1a1d20;color:#f2f2f2;border-color:#9182b2;box-shadow:8px 8px 0 #08090b}
 @media(max-width:390px){.deleteChoices{grid-template-columns:1fr}.deleteChoices .btn{min-height:48px}.deleteDialog{padding:17px 13px}}
 
+/* Center a lone visible action in confirmation dialogs. */
+.deleteChoices:has(> button[hidden]) > button:not([hidden]){grid-column:1 / -1;justify-self:center;width:min(100%,240px)}
+
 /* In-app day-complete note dialog */
 .finishDialog{max-width:460px;text-align:center}.finishDialog .finishLabel{display:block;text-align:left;margin:14px 0 7px;font-size:13px}.finishDialog textarea{display:block;box-sizing:border-box;width:100%;min-height:110px;padding:12px;background:var(--panel,#111a32);color:inherit;border:2px solid var(--line,#7883a5);border-radius:4px;font:inherit;resize:vertical}.finishDialog textarea:focus{outline:2px solid #ffb1d4;outline-offset:2px}.finishDialog .deleteChoices{margin-top:16px}.finishDialog .deleteChoices button{flex:1}body[data-theme="white"] .finishDialog textarea{background:#fff;color:#222;border-color:#aaa}body[data-theme="dark"] .finishDialog textarea{background:#262a30;color:#f2f2f2;border-color:#747984}
 
