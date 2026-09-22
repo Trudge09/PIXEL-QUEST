@@ -43,18 +43,36 @@ export default {
         const now = Math.floor(Date.now() / 1000);
         if (profile.aud !== CLIENT_ID || (profile.azp && profile.azp !== CLIENT_ID) || !['accounts.google.com', 'https://accounts.google.com'].includes(profile.iss) || !profile.sub || !/^\d+$/.test(String(profile.exp)) || Number(profile.exp) <= now || String(profile.email_verified) !== 'true') return json({ error: 'Google 로그인 검증에 실패했어.' }, 401);
         const user = { sub: profile.sub, name: String(profile.name || '').slice(0, 100), email: String(profile.email || '').slice(0, 254) };
-        const payload = b64(encoder.encode(JSON.stringify({ ...user, exp: now + 60 * 60 * 24 * 30 })));
+        await env.DB.prepare('CREATE TABLE IF NOT EXISTS deletion_guards (user_key TEXT PRIMARY KEY, deleted_at INTEGER NOT NULL, expires_at INTEGER NOT NULL)').run();
+        const key = await sign('deleted-user:' + user.sub, env.SESSION_SECRET);
+        const previous = await env.DB.prepare('SELECT deleted_at FROM deletion_guards WHERE user_key = ? AND expires_at > ?').bind(key, Date.now()).first();
+        const payload = b64(encoder.encode(JSON.stringify({ ...user, iat: Math.max(Date.now(), (previous?.deleted_at || 0) + 1), exp: now + 60 * 60 * 24 * 30 })));
         return json({ user }, 200, { 'set-cookie': cookie(payload + '.' + await sign(payload, env.SESSION_SECRET), 60 * 60 * 24 * 30) });
       }
       if (url.pathname === '/api/logout' && request.method === 'POST') return json({ ok: true }, 200, { 'set-cookie': cookie('', 0) });
       const user = await session(request, env.SESSION_SECRET);
       if (url.pathname === '/api/me' && request.method === 'GET') return json({ user: user ? { sub: user.sub, name: user.name, email: user.email } : null });
       if (!user) return json({ error: '로그인이 필요해.' }, 401);
-      if (url.pathname !== '/api/state') return json({ error: '요청한 API가 없어.' }, 404);
+      await env.DB.prepare('CREATE TABLE IF NOT EXISTS deletion_guards (user_key TEXT PRIMARY KEY, deleted_at INTEGER NOT NULL, expires_at INTEGER NOT NULL)').run();
+      await env.DB.prepare('DELETE FROM deletion_guards WHERE expires_at <= ?').bind(Date.now()).run();
+      const userKey = await sign('deleted-user:' + user.sub, env.SESSION_SECRET);
+      const guard = await env.DB.prepare('SELECT deleted_at FROM deletion_guards WHERE user_key = ? AND expires_at > ?').bind(userKey, Date.now()).first();
+      if (guard && (!Number.isSafeInteger(user.iat) || user.iat <= guard.deleted_at)) return json({ error: '이 계정의 이전 로그인은 만료되었습니다. 다시 로그인해 주세요.' }, 401, { 'set-cookie': cookie('', 0) });
       await env.DB.prepare('CREATE TABLE IF NOT EXISTS user_states (user_id TEXT PRIMARY KEY, data TEXT NOT NULL, version INTEGER NOT NULL DEFAULT 1, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)').run();
+      if (url.pathname === '/api/account/data' && request.method === 'DELETE') {
+        const body = await readJson(request);
+        if (body.confirm !== 'DELETE') return json({ error: '삭제 확인 정보가 올바르지 않아.' }, 400);
+        const deletedAt = Date.now();
+        await env.DB.batch([
+          env.DB.prepare('INSERT INTO deletion_guards (user_key, deleted_at, expires_at) VALUES (?, ?, ?) ON CONFLICT(user_key) DO UPDATE SET deleted_at = excluded.deleted_at, expires_at = excluded.expires_at').bind(userKey, deletedAt, deletedAt + 31 * 86400000),
+          env.DB.prepare('DELETE FROM user_states WHERE user_id = ?').bind(user.sub)
+        ]);
+        return json({ ok: true }, 200, { 'set-cookie': cookie('', 0) });
+      }
+      if (url.pathname !== '/api/state') return json({ error: '요청한 API가 없어.' }, 404);
       if (request.method === 'GET') {
         const row = await env.DB.prepare('SELECT data, version FROM user_states WHERE user_id = ?').bind(user.sub).first();
-        return json({ data: row ? JSON.parse(row.data) : null, version: row ? row.version : 0 });
+        return json({ data: row ? JSON.parse(row.data) : null, version: row ? row.version : 0, previouslyDeleted: !row && !!guard });
       }
       if (request.method === 'PUT') {
         const body = await readJson(request);
@@ -62,10 +80,10 @@ export default {
         const data = JSON.stringify(body.data);
         if (encoder.encode(data).length > 250000) return json({ error: '저장 용량 한도(250KB)를 초과했어.' }, 413);
         if (body.version === 0) {
-          const result = await env.DB.prepare('INSERT INTO user_states (user_id, data, version) VALUES (?, ?, 1) ON CONFLICT(user_id) DO NOTHING').bind(user.sub, data).run();
+          const result = await env.DB.prepare('INSERT INTO user_states (user_id, data, version) SELECT ?, ?, 1 WHERE NOT EXISTS (SELECT 1 FROM deletion_guards WHERE user_key = ? AND deleted_at >= ? AND expires_at > ?) ON CONFLICT(user_id) DO NOTHING').bind(user.sub, data, userKey, Number(user.iat) || 0, Date.now()).run();
           return result.meta.changes ? json({ version: 1 }) : json({ error: '다른 기기에서 먼저 기록을 저장했어.' }, 409);
         }
-        const result = await env.DB.prepare('UPDATE user_states SET data = ?, version = version + 1, updated_at = CURRENT_TIMESTAMP WHERE user_id = ? AND version = ?').bind(data, user.sub, body.version).run();
+        const result = await env.DB.prepare('UPDATE user_states SET data = ?, version = version + 1, updated_at = CURRENT_TIMESTAMP WHERE user_id = ? AND version = ? AND NOT EXISTS (SELECT 1 FROM deletion_guards WHERE user_key = ? AND deleted_at >= ? AND expires_at > ?)').bind(data, user.sub, body.version, userKey, Number(user.iat) || 0, Date.now()).run();
         return result.meta.changes ? json({ version: body.version + 1 }) : json({ error: '다른 기기에서 기록이 변경됐어.' }, 409);
       }
       return json({ error: '지원하지 않는 요청이야.' }, 405);
