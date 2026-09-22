@@ -446,7 +446,7 @@ async function loginWithGoogle(response){if(!response.credential)return;document
 async function initAuth(){try{const result=await api('/api/me');if(result.user){await activateUser(result.user)}else{guestState();syncStatus('GUEST MODE · LOCAL SAVE');document.body.classList.remove('auth-loading')}}catch(e){console.error(e);syncStatus('⚠ 서버 연결 확인 필요');document.body.classList.remove('auth-loading')}setAuthUI();let tries=0;const startGoogle=()=>{if(window.google?.accounts?.id){google.accounts.id.initialize({client_id:'497307024897-p1t3fjm3cpjvj6t7r7lhp870b9iljaa5.apps.googleusercontent.com',callback:loginWithGoogle,auto_select:false});$('googleButton').innerHTML='';google.accounts.id.renderButton($('googleButton'),{theme:'outline',size:'large',text:'signin_with',shape:'rectangular',locale:isEn()?'en':'ko'});setAuthUI()}else if(tries++<30)setTimeout(startGoogle,300);else syncStatus('⚠ Google 로그인 버튼 로드 실패 · 새로고침해 줘')};startGoogle()}
 $('logoutBtn').onclick=async()=>{if(dirty){alert('동기화되지 않은 기록이 있어. 동기화 완료 후 로그아웃해 줘.');return}document.body.classList.add('auth-loading');try{await api('/api/logout',{method:'POST',body:'{}'});cloudUser=null;cloudVersion=0;window.google?.accounts?.id?.disableAutoSelect();guestState();setAuthUI();syncStatus('GUEST MODE · LOCAL SAVE')}catch(e){alert('로그아웃 실패: '+e.message)}finally{document.body.classList.remove('auth-loading')}};
 window.addEventListener('online',()=>{if(cloudUser&&dirty)queueSync()});window.addEventListener('beforeunload',e=>{if(cloudUser&&dirty){e.preventDefault();e.returnValue=''}});
-render();initAuth()})();
+render();initAuth();
 
 // Data management: no destructive action occurs until the user explicitly confirms.
 let dataManageReturnFocus=null, accountDeletionInProgress=false;
@@ -489,4 +489,5 @@ document.getElementById('privacyOpen').addEventListener('click',()=>{privacyRetu
 document.getElementById('privacyClose').addEventListener('click',closePrivacy);
 document.getElementById('privacyOverlay').addEventListener('click',e=>{if(e.target.id==='privacyOverlay')closePrivacy()});
 document.addEventListener('keydown',e=>{if(!document.getElementById('privacyOverlay').classList.contains('show'))return;if(e.key==='Escape'){e.preventDefault();closePrivacy()}if(e.key==='Tab'){e.preventDefault();document.getElementById('privacyClose').focus()}});
+})();
 </script></body></html>
